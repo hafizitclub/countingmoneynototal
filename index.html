@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Money Drag Game – Align Coins to 50¢ Center</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    /* Outer container */
+    .game-container {
+      width: 800px;
+      margin: auto;
+      border: 2px dotted #666;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    /* Top info */
+    .top-info {
+      text-align: center;
+    }
+    .score, .target, #feedback {
+      font-size: 18px;
+      margin: 5px 0;
+    }
+    /* Layout: Two columns: left for money, right for drop zone */
+    .layout-row {
+      display: flex;
+      gap: 30px;
+    }
+    /* Left column: money items (coins + bills) */
+    .money-column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      align-items: flex-start; /* left-align the money rows */
+      padding-left: 10px;
+    }
+    /* Each money row: coins row or bills row */
+    .money-row {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-start;
+      align-items: center; /* so transforms pivot around the same horizontal center line */
+    }
+    /* Right column: drop zone & buttons */
+    .drop-zone-column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    /* Drop zone styling */
+    .drop-zone {
+      width: 350px;
+      min-height: 250px;
+      border: 2px dashed #444;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+      text-align: center;
+    }
+    #dropZoneTotal {
+      font-weight: bold;
+    }
+    #droppedMoneyContainer {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    /* Modern button container */
+    .buttons-container {
+      display: flex;
+      gap: 10px;
+    }
+    .modern-btn {
+      background-color: #17a2b8;
+      color: #fff;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.3s;
+    }
+    .modern-btn:hover {
+      background-color: #138496;
+    }
+    /* Modern Submit button */
+    #submitButton {
+      background-color: #28a745;
+      color: #fff;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.3s;
+    }
+    #submitButton:hover {
+      background-color: #218838;
+    }
+    /* Money items styling */
+    .money {
+      width: 60px;
+      height: 60px;
+      background-color: gold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+      border-radius: 5px;
+      user-select: none;
+    }
+    /* COINS: align to 50¢ center (70px) 
+       => if smaller, shift down by (70 - coinHeight)/2 
+       => if bigger, shift up by that difference. 
+       50¢ is reference => no shift. */
+    .coin {
+      border-radius: 50%;
+    }
+    /* 50¢ (70px) => no shift */
+    .fifty-cent {
+      width: 70px !important;
+      height: 70px !important;
+      font-size: 18px !important;
+      transform: translateY(0);
+      background-color: #d3d3d3; /* grey coin */
+    }
+    /* 5¢ => 30px => shift = (70 - 30)/2 = 20 => transform: translateY(20px) */
+    .five-cent {
+      width: 30px !important;
+      height: 30px !important;
+      font-size: 10px !important;
+      transform: translateY(20px);
+    }
+    /* 10¢ => 40px => shift = (70 - 40)/2 = 15 => transform: translateY(15px) */
+    .ten-cent {
+      width: 40px !important;
+      height: 40px !important;
+      font-size: 12px !important;
+      transform: translateY(15px);
+      background-color: #d3d3d3; /* also grey */
+    }
+    /* 20¢ => 50px => shift = (70 - 50)/2 = 10 => transform: translateY(10px) */
+    .twenty-cent {
+      width: 50px !important;
+      height: 50px !important;
+      font-size: 14px !important;
+      transform: translateY(10px);
+      background-color: #d3d3d3; /* also grey */
+    }
+    /* $1 => 65px => shift = (70 - 65)/2 = 2.5 => transform: translateY(2.5px) */
+    .one-dollar-coin {
+      width: 65px !important;
+      height: 65px !important;
+      font-size: 16px !important;
+      transform: translateY(2.5px);
+    }
+    .two-dollar {
+      background-color: lightblue;
+    }
+    .five-dollar {
+      background-color: #90EE90;
+    }
+    .ten-dollar {
+      background-color: #F08080;
+    }
+    .dragging {
+      opacity: 0.5;
+    }
+    /* Glowing feedback effect */
+    .glow {
+      animation: glowAnimation 2s infinite;
+    }
+    @keyframes glowAnimation {
+      0% { color: #FF0000; text-shadow: 0 0 5px #FF0000, 0 0 10px #FF0000; }
+      25% { color: #FFFF00; text-shadow: 0 0 5px #FFFF00, 0 0 10px #FFFF00; }
+      50% { color: #00FF00; text-shadow: 0 0 5px #00FF00, 0 0 10px #00FF00; }
+      75% { color: #00FFFF; text-shadow: 0 0 5px #00FFFF, 0 0 10px #00FFFF; }
+      100% { color: #FF0000; text-shadow: 0 0 5px #FF0000, 0 0 10px #FF0000; }
+    }
+  </style>
+</head>
+<body>
+  <div class="game-container">
+    <!-- Top Info -->
+    <div class="top-info">
+      <div class="score">Score: <span id="score">0</span></div>
+      <div class="target">Your Target: $<span id="targetAmount">0.00</span></div>
+      <div id="feedback"></div>
+    </div>
+
+    <div class="layout-row">
+      <!-- Left column: money items -->
+      <div class="money-column">
+        <div id="coinsContainer" class="money-row"></div>
+        <div id="billsContainer" class="money-row"></div>
+      </div>
+
+      <!-- Right column: drop zone + buttons -->
+      <div class="drop-zone-column">
+        <div class="drop-zone" id="dropZone">
+          <div id="dropZoneTotal">Total: $0.00</div>
+          <div id="droppedMoneyContainer"></div>
+        </div>
+
+        <!-- Buttons below the drop zone -->
+        <div class="buttons-container">
+          <button class="modern-btn" id="showTotalBtn">Show Total</button>
+          <button class="modern-btn" id="hideTotalBtn">Hide Total</button>
+          <button id="submitButton">Submit</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let score = 0;
+    let targetAmount = 0;
+    let totalAmount = 0;
+
+    // The full set of denominations
+    const FULL_DENOMINATIONS = [0.05, 0.10, 0.20, 0.50, 1, 2, 5, 10];
+    let usedTargets = [];
+    const MAX_USED_TARGETS = 5;
+
+    let draggedCloneId = null;
+    let dragFromSource = false;
+
+    // Subset-sum check
+    function canMakeTarget(denoms, target) {
+      const targetCents = Math.round(target * 100);
+      const denomCents = denoms.map(d => Math.round(d * 100));
+      let dp = new Array(targetCents + 1).fill(false);
+      dp[0] = true;
+      for (let c of denomCents) {
+        for (let s = targetCents; s >= c; s--) {
+          if (dp[s - c]) dp[s] = true;
+        }
+      }
+      return dp[targetCents];
+    }
+
+    // Random solvable target (0.05..$20) skipping used
+    function pickRandomSolvableTarget() {
+      let tries = 0;
+      while (tries < 500) {
+        tries++;
+        let candidateCents = 5 * Math.floor(Math.random() * (2000 / 5) + 1);
+        let candidate = candidateCents / 100;
+        if (!usedTargets.includes(candidate)) {
+          return candidate;
+        }
+      }
+      return 0;
+    }
+
+    // Random subset 4..6 that can form 'target'
+    function pickRandomSubsetThatCanMakeTarget(target) {
+      let tries = 0;
+      while (tries < 300) {
+        tries++;
+        const size = Math.floor(Math.random() * 3) + 4; // 4..6
+        let shuffled = [...FULL_DENOMINATIONS];
+        shuffleArray(shuffled);
+        let subset = shuffled.slice(0, size);
+        if (canMakeTarget(subset, target)) {
+          return subset;
+        }
+      }
+      return null;
+    }
+
+    function shuffleArray(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    function generateSubsetForTarget(target) {
+      return pickRandomSubsetThatCanMakeTarget(target);
+    }
+
+    // Create money tiles for the chosen subset
+    function createMoneyTiles(denoms) {
+      const coinsContainer = document.getElementById("coinsContainer");
+      const billsContainer = document.getElementById("billsContainer");
+      coinsContainer.innerHTML = "";
+      billsContainer.innerHTML = "";
+
+      denoms.forEach(value => {
+        const money = document.createElement("div");
+        money.className = "money";
+        money.setAttribute("data-value", value);
+
+        if (value <= 1) {
+          // COINS
+          if (value === 0.05) {
+            money.textContent = "5¢";
+            money.classList.add("coin", "five-cent");
+          } else if (value === 0.10) {
+            money.textContent = "10¢";
+            money.classList.add("coin", "ten-cent");
+          } else if (value === 0.20) {
+            money.textContent = "20¢";
+            money.classList.add("coin", "twenty-cent");
+          } else if (value === 0.50) {
+            money.textContent = "50¢";
+            money.classList.add("coin", "fifty-cent");
+          } else if (value === 1) {
+            money.textContent = "$1";
+            money.classList.add("coin", "one-dollar-coin");
+          }
+          coinsContainer.appendChild(money);
+        } else {
+          // BILLS
+          money.textContent = `$${value.toFixed(0)}`;
+          if (value === 2) {
+            money.classList.add("two-dollar");
+          } else if (value === 5) {
+            money.classList.add("five-dollar");
+          } else if (value === 10) {
+            money.classList.add("ten-dollar");
+          }
+          billsContainer.appendChild(money);
+        }
+
+        money.draggable = true;
+        money.addEventListener("dragstart", handleDragStart);
+        money.addEventListener("dragend", handleDragEnd);
+      });
+    }
+
+    // Next question
+    function nextTarget() {
+      let newTarget = pickRandomSolvableTarget();
+      if (newTarget <= 0) {
+        newTarget = 0.05;
+      }
+
+      let subset = generateSubsetForTarget(newTarget);
+      let tries = 0;
+      while (!subset && tries < 100) {
+        tries++;
+        newTarget = pickRandomSolvableTarget();
+        if (newTarget <= 0) newTarget = 0.05;
+        subset = generateSubsetForTarget(newTarget);
+      }
+
+      if (!subset) {
+        alert("Couldn't find a random subset that can form the target. Using full set & target=0.05.");
+        subset = FULL_DENOMINATIONS;
+        newTarget = 0.05;
+      }
+
+      usedTargets.push(newTarget);
+      if (usedTargets.length > MAX_USED_TARGETS) usedTargets.shift();
+
+      targetAmount = newTarget;
+      totalAmount = 0;
+      document.getElementById("targetAmount").textContent = newTarget.toFixed(2);
+      updateTotalDisplay();
+      document.getElementById("droppedMoneyContainer").innerHTML = "";
+      document.getElementById("feedback").innerText = "";
+      document.getElementById("feedback").classList.remove("glow");
+
+      createMoneyTiles(subset);
+    }
+
+    function updateTotalDisplay() {
+      document.getElementById("dropZoneTotal").textContent = `Total: $${totalAmount.toFixed(2)}`;
+    }
+
+    function checkAnswer() {
+      const feedback = document.getElementById("feedback");
+      if (Math.abs(totalAmount - targetAmount) < 0.001) {
+        feedback.innerText = "Correct! ✓";
+        feedback.classList.add("glow");
+        score++;
+        document.getElementById("score").innerText = score;
+        setTimeout(() => {
+          nextTarget();
+        }, 1500);
+      } else {
+        feedback.innerText = "Try again!";
+        feedback.classList.remove("glow");
+      }
+    }
+
+    // DRAG & DROP
+    function handleDragStart(e) {
+      const sourceContainerId = e.target.parentNode.id;
+      if (sourceContainerId === "coinsContainer" || sourceContainerId === "billsContainer") {
+        dragFromSource = true;
+        const clone = e.target.cloneNode(true);
+        clone.draggable = true;
+        clone.addEventListener("dragstart", handleDragStart);
+        clone.addEventListener("dragend", handleDragEnd);
+        clone.id = "clone-" + Date.now();
+        clone.setAttribute("data-clone", "true");
+        draggedCloneId = clone.id;
+        e.dataTransfer.setData("text/plain", clone.id);
+        clone.classList.add("dragging");
+        document.body.appendChild(clone);
+      } else {
+        dragFromSource = false;
+        draggedCloneId = e.target.id;
+        e.dataTransfer.setData("text/plain", e.target.id);
+        e.target.classList.add("dragging");
+      }
+    }
+    function handleDragEnd(e) {
+      e.target.classList.remove("dragging");
+    }
+
+    const dropZone = document.getElementById("dropZone");
+    dropZone.addEventListener("dragover", function(e) {
+      e.preventDefault();
+    });
+    dropZone.addEventListener("drop", function(e) {
+      e.preventDefault();
+      const id = e.dataTransfer.getData("text/plain");
+      const element = document.getElementById(id);
+      if (!element) return;
+
+      if (dragFromSource && element.getAttribute("data-clone") === "true") {
+        document.getElementById("droppedMoneyContainer").appendChild(element);
+        const value = parseFloat(element.getAttribute("data-value"));
+        totalAmount += value;
+        updateTotalDisplay();
+      }
+      draggedCloneId = null;
+      dragFromSource = false;
+    });
+
+    [document.getElementById("coinsContainer"), document.getElementById("billsContainer")].forEach(container => {
+      container.addEventListener("dragover", function(e) {
+        e.preventDefault();
+      });
+      container.addEventListener("drop", function(e) {
+        e.preventDefault();
+        const id = e.dataTransfer.getData("text/plain");
+        const element = document.getElementById(id);
+        if (!element) return;
+        if (element.parentNode && element.parentNode.id === "droppedMoneyContainer") {
+          const value = parseFloat(element.getAttribute("data-value"));
+          totalAmount -= value;
+          updateTotalDisplay();
+          element.parentNode.removeChild(element);
+        }
+        draggedCloneId = null;
+      });
+    });
+
+    // Show/Hide Total
+    document.getElementById("showTotalBtn").addEventListener("click", () => {
+      document.getElementById("dropZoneTotal").style.display = "block";
+    });
+    document.getElementById("hideTotalBtn").addEventListener("click", () => {
+      document.getElementById("dropZoneTotal").style.display = "none";
+    });
+
+    document.getElementById("submitButton").addEventListener("click", checkAnswer);
+
+    // Start the game
+    nextTarget();
+  </script>
+</body>
+</html>
